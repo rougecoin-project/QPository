@@ -33,7 +33,25 @@ test('CLI lifecycle, independent identity, real SDK HTTP authorization, tamperin
   await bad(['push'],repo,env,/uncertain outcome/); assert.equal(fixture.requests.length,0,'uncertain push must not be resubmitted');
   await writeFile(initialStatePath,JSON.stringify(initialState));
   await good(['push'],repo,env); const report=await good(['verify'],repo,env); assert.match(report,/✓ Repository content verified/); assert.match(report,/✓ ML-DSA-65 signature valid/); assert.match(report,/✓ RougeChain proof confirmed/);
-  await good(['push'],repo,env); assert.equal(fixture.tokens.size,1,'same state push is idempotent');
+  const web=join(dir,'website','dist');
+  assert.match(await good(['push','--web',web],repo,env),/Website snapshot ready/);
+  const catalogue=JSON.parse(await readFile(join(web,'catalogue.json'),'utf8'));
+  assert.equal(catalogue.repositories.length,1);
+  assert.equal(catalogue.repositories[0].head,git(repo,['rev-parse','HEAD']).trim());
+  const snapshot=await readFile(join(web,catalogue.repositories[0].data),'utf8');
+  assert.equal(snapshot.includes(identity.privateKey),false);
+  const publicSnapshot=JSON.parse(snapshot);
+  for(const record of publicSnapshot.history) {
+    assert.equal(cid(await readFile(join(web,'objects',record.cid.slice(7)))),record.cid);
+    const bundleCid=record.envelope.manifest.bundle_cid;
+    assert.equal(cid(await readFile(join(web,'objects',bundleCid.slice(7)))),bundleCid);
+  }
+  const blocked=join(dir,'blocked');await writeFile(blocked,'not a directory');
+  await bad(['push','--web',blocked],repo,env,/Chain push succeeded, but website export failed/);
+  await good(['verify'],repo,env);
+  await good(['push'],repo,{...env,QPO_WEB_DIST:web});
+  assert.equal(JSON.parse(await readFile(join(web,'catalogue.json'),'utf8')).repositories.length,1);
+  assert.equal(fixture.tokens.size,1,'same state push is idempotent');
   assert.ok(fixture.requests.length===2); assert.equal(JSON.stringify(fixture.requests).includes(identity.privateKey),false);
   const independent={...env,QPO_HOME:join(dir,'independent'),QPO_OWNER_KEY:identity.publicKey};
   await mkdir(join(dir,'clone-machine'));

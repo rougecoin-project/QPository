@@ -93,3 +93,11 @@ Every fetched object is SHA-256 checked. Envelopes have strict schemas, canonica
 A timed-out push can still mine later. The repository retains a `pending` envelope CID and blocks blind resubmission. After the matching record is mined, rerun push with the original HEAD to recover the local checkpoint. If a node conclusively rejected the submission, inspect its mempool/canonical records before manually clearing `pending` in `.git/qpository.json`; never clear it merely because a request timed out. A leftover `.git/qpository.json.lock` from a terminated process may be removed after confirming no qpo push process is running. Concurrent pushes from different copies can conflict; V0.1 fails closed rather than electing an application fork.
 
 See [the architecture and source audit](docs/QPOSITORY_ARCHITECTURE.md) for exact integration points, serialization, root algorithm and trust limits.
+
+## Export to the website on push
+
+```sh
+qpo push --web /absolute/path/QPository/website/dist
+```
+
+This confirms the RougeChain proof, then verifies and exports the public snapshot in one command. Set `QPO_WEB_DIST` to use the same destination on subsequent plain `qpo push` calls. The explicit flag takes precedence. Build and deploy the website separately to update the hosted site. An export failure returns a nonzero status but preserves the successful chain proof; retry `qpo web-export <website-dist>` or the same push without creating a duplicate anchor.

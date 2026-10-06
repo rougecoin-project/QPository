@@ -17,6 +17,13 @@ export async function webExport(destination,cwd=process.cwd()) {
   }
   const out=resolve(destination),key=hash(cfg.repositoryId),relative=`repositories/${key}.json`,bundlePath=`bundles/${m.bundle_cid.slice(7)}.bundle`;
   await mkdir(join(out,'repositories'),{recursive:true});await mkdir(join(out,'bundles'),{recursive:true});
+  // Publish read-only CAS objects so a verifier can clone without the publisher's disk.
+  await mkdir(join(out,'objects'),{recursive:true});
+  for(const record of history) {
+    for(const objectCid of [record.envelopeCid,record.envelope.manifest.bundle_cid]) {
+      await writeFile(join(out,'objects',objectCid.slice(7)),await storage.get(objectCid));
+    }
+  }
   let catalogue={version:1,repositories:[]};try{catalogue=JSON.parse(await readFile(join(out,'catalogue.json'),'utf8'));}catch(e){if(e.code!=='ENOENT')throw e;}
   check(catalogue.version===1&&Array.isArray(catalogue.repositories),'Invalid website catalogue');
   const uri=`rouge://${cfg.owner}/${cfg.repository}`;check(!catalogue.repositories.some(x=>x.uri===uri&&x.repositoryId!==cfg.repositoryId),'Website alias is pinned to another identity');

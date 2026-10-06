@@ -1,3 +1,4 @@
+import { aboutPage } from './about.mjs';
 import { directoryEntries, renderReadme } from './browse.mjs';
 import { verifyPublished, filesAt, commitsAt, checkChain, decoder, sha, canonical } from './verify.mjs';
 const app=document.querySelector('#app');let catalogue,selected,verified,verificationError='',chainState='unchecked',chainError='',filter='';
@@ -35,7 +36,7 @@ function repoPage(tab='code',path=''){
  const find=document.querySelector('#file-search');if(find)find.oninput=()=>{let visible=0;for(const row of document.querySelectorAll('[data-file]')){row.hidden=!row.dataset.file.toLowerCase().includes(find.value.toLowerCase());if(!row.hidden)visible++;}document.querySelector('#file-empty').hidden=visible>0;};
 }
 let navigation=0;
-async function render(){const call=++navigation;try{const parts=location.hash.slice(1).split('/');if(parts[0]!=='repo'){list();return;}const id=decodeURIComponent(parts[1]||''),item=catalogue.repositories.find(x=>x.repositoryId===id);if(!item){app.innerHTML='<div class="empty">Repository not found. <a href="#">Return to repositories</a></div>';return;}
+async function render(){const call=++navigation;try{const parts=location.hash.slice(1).split('/');if(parts[0]==='about'){app.innerHTML=aboutPage();return;}if(parts[0]!=='repo'){list();return;}const id=decodeURIComponent(parts[1]||''),item=catalogue.repositories.find(x=>x.repositoryId===id);if(!item){app.innerHTML='<div class="empty">Repository not found. <a href="#">Return to repositories</a></div>';return;}
 if(selected?.history.at(-1).envelope.manifest.repository_id!==id){app.innerHTML='<div class="loading">Checking repository signature and content…</div>';const r=await fetch(item.data);if(!r.ok)throw new Error('Repository snapshot unavailable');const data=await r.json();if(data.history?.at(-1)?.envelope?.manifest?.repository_id!==item.repositoryId || data.expectedKey!==data.history?.at(-1)?.envelope?.manifest?.owner_public_key) throw new Error('Snapshot does not match the selected repository');if(call!==navigation)return;selected=data;chainState='unchecked';verificationError='';verified=null;try{verified=await verifyPublished(data);}catch(e){verificationError=e.message;}if(call!==navigation)return;}
 repoPage(['code','commits','proof'].includes(parts[2])?parts[2]:'code',decodeURIComponent(parts.slice(3).join('/')));
 }catch(e){app.innerHTML=`<div class="card empty">${esc(e.message)} <a href="#">Return to repositories</a></div>`;}}

@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {directoryEntries,renderReadme} from '../website/src/browse.mjs';
+test('browse verified paths as folders without prefix collisions',()=>{const files=['src/deep/a.js','src/b.js','src2/c.js','README.md'].map(path=>({path}));assert.deepEqual(directoryEntries(files).map(x=>[x.name,x.directory]),[['src',true],['src2',true],['README.md',false]]);assert.deepEqual(directoryEntries(files,'src').map(x=>x.name),['deep','b.js']);assert.deepEqual(directoryEntries(files,'missing'),[]);});
+test('README renders headings and fenced code while escaping HTML',()=>{const html=renderReadme('# Demo\r\n\r\n<script>alert(1)</script>\n\n```js\n<img src=x onerror=alert(1)>\n```');assert.match(html,/<h1>Demo<\/h1>/);assert.ok(!html.includes('<script>'));assert.ok(!html.includes('<img'));assert.match(html,/&lt;script&gt;/);assert.match(html,/<pre><code>/);});

@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "repositories": [
+    {
+      "owner": "test",
+      "name": "qpository-demo",
+      "uri": "rouge://test/qpository-demo",
+      "repositoryId": "721dec83af117b477ac68a505171680d72e446f7d8b3f6c08e20c09422825d79/qpository-demo",
+      "head": "2822517b02b4bf63ff02be0addad4263aaa367de",
+      "sequence": 1,
+      "timestamp": "2026-10-06T03:08:09.512Z",
+      "data": "repositories/36e3a07150786da97bccf7f1c6d83e2f061092d28b83fa787b3412360d3b6b43.json"
+    }
+  ]
+}

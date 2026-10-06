@@ -1,0 +1,11 @@
+node_modules/
+.rougechain-reference/
+.qpo-storage/
+coverage/
+*.tmp
+
+.env*
+.qpository/
+website/.git/
+website/.openai/
+

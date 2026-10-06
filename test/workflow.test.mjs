@@ -1,0 +1,71 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { resolve, join } from 'node:path';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { nodeFixture } from './fixture.mjs';
+import { storageServer } from '../bin/storage.mjs';
+import { FileStorage, HttpStorage } from '../src/storage.mjs';
+import { git } from '../src/git.mjs';
+import { canonical, signManifest, cid, hash } from '../src/protocol.mjs';
+const cli=resolve('bin/qpo.mjs');
+async function run(args,cwd,env) {
+  const child=spawn(process.execPath,[cli,...args],{cwd,env:{...process.env,...env},stdio:['ignore','pipe','pipe']});
+  let stdout='',stderr=''; child.stdout.on('data',b=>stdout+=b); child.stderr.on('data',b=>stderr+=b); const [code]=await once(child,'close'); return {code,stdout,stderr};
+}
+async function good(args,cwd,env) { const r=await run(args,cwd,env); assert.equal(r.code,0,r.stderr); return r.stdout; }
+async function bad(args,cwd,env,pattern) { const r=await run(args,cwd,env); assert.notEqual(r.code,0,r.stdout); assert.match(r.stderr,pattern); }
+async function listen(server) { server.listen(0,'127.0.0.1'); await once(server,'listening'); return `http://127.0.0.1:${server.address().port}`; }
+test('CLI lifecycle, independent identity, real SDK HTTP authorization, tampering and history',async(t)=>{
+  const dir=await mkdtemp(join(tmpdir(),'qpo-test-')),fixture=nodeFixture(),api=await listen(fixture.server),cas=storageServer(join(dir,'cas'),'storage-test-token'),url=await listen(cas);
+  t.after(async()=>{ fixture.server.closeAllConnections(); cas.closeAllConnections(); await Promise.all([new Promise(r=>fixture.server.close(r)),new Promise(r=>cas.close(r))]); await rm(dir,{recursive:true,force:true}); });
+  const repo=join(dir,'qpository-demo'); await mkdir(repo);
+  git(repo,['init']); git(repo,['config','user.name','QPo Test']); git(repo,['config','user.email','qpo@example.test']); git(repo,['config','core.autocrlf','false']);
+  await writeFile(join(repo,'hello.txt'),'hello qpository\n'); git(repo,['add','.']); git(repo,['commit','-m','initial commit']);
+  const env={QPO_HOME:join(dir,'owner'),QPO_API:`${api}/api`,QPO_CHAIN_ID:'qpo-test-chain',QPO_STORAGE:url,QPO_STORAGE_TOKEN:'storage-test-token',QPO_CONFIRM_TIMEOUT_MS:'2000'};
+  await good(['init'],repo,env); await bad(['init'],repo,env,/already initialized/);
+  const identity=JSON.parse(await readFile(join(env.QPO_HOME,'identity.json'),'utf8'));
+  const privateLeak=fixture.requests.some(x=>JSON.stringify(x).includes(identity.privateKey)); assert.equal(privateLeak,false);
+  const initialStatePath=join(repo,'.git','qpository.json'),initialState=JSON.parse(await readFile(initialStatePath,'utf8'));
+  await writeFile(initialStatePath,JSON.stringify({...initialState,pending:`sha256:${'0'.repeat(64)}`}));
+  await bad(['push'],repo,env,/uncertain outcome/); assert.equal(fixture.requests.length,0,'uncertain push must not be resubmitted');
+  await writeFile(initialStatePath,JSON.stringify(initialState));
+  await good(['push'],repo,env); const report=await good(['verify'],repo,env); assert.match(report,/✓ Repository content verified/); assert.match(report,/✓ ML-DSA-65 signature valid/); assert.match(report,/✓ RougeChain proof confirmed/);
+  await good(['push'],repo,env); assert.equal(fixture.tokens.size,1,'same state push is idempotent');
+  assert.ok(fixture.requests.length===2); assert.equal(JSON.stringify(fixture.requests).includes(identity.privateKey),false);
+  const independent={...env,QPO_HOME:join(dir,'independent'),QPO_OWNER_KEY:identity.publicKey};
+  await mkdir(join(dir,'clone-machine'));
+  await bad(['clone','rouge://test/qpository-demo'],join(dir,'clone-machine'),{...independent,QPO_OWNER_KEY:''},/Unknown signer/);
+  await good(['clone','rouge://test/qpository-demo'],join(dir,'clone-machine'),independent);
+  const cloned=join(dir,'clone-machine','qpository-demo'); await good(['verify'],cloned,{...independent,QPO_OWNER_KEY:''});
+  await assert.rejects(readFile(join(independent.QPO_HOME,'identity.json')),e=>e.code==='ENOENT');
+  await writeFile(join(cloned,'hello.txt'),'tampered\n'); await bad(['verify'],cloned,independent,/content has changed/);
+  git(cloned,['checkout','--','hello.txt']); git(cloned,['config','user.name','QPo Test']); git(cloned,['config','user.email','qpo@example.test']);
+  await writeFile(join(cloned,'hello.txt'),'different HEAD\n'); git(cloned,['add','.']); git(cloned,['commit','-m','wrong HEAD']); await bad(['verify'],cloned,independent,/HEAD/);
+  const cfg=JSON.parse(await readFile(join(repo,'.git','qpository.json'),'utf8')),stored=new FileStorage(join(dir,'cas'));
+  const envelopeBytes=await stored.get(cfg.envelopeCid),envelope=JSON.parse(envelopeBytes),bundlePath=join(dir,'cas',envelope.manifest.bundle_cid.slice(7)),originalBundle=await readFile(bundlePath);
+  await writeFile(bundlePath,'corrupt'); await bad(['verify'],repo,env,/Corrupted storage object|Storage GET failed: 500/); await writeFile(bundlePath,originalBundle);
+  const envelopePath=join(dir,'cas',cfg.envelopeCid.slice(7)); await writeFile(envelopePath,'{}'); await bad(['verify'],repo,env,/Corrupted storage object|Storage GET failed: 500/); await writeFile(envelopePath,envelopeBytes);
+  const token=[...fixture.tokens.values()][0],originalUri=token.metadata_uri; token.metadata_uri='garbage'; await bad(['verify'],repo,env,/Malformed CID/); token.metadata_uri=originalUri;
+  token.creator='0'.repeat(3904); await bad(['verify'],repo,env,/Invalid RougeChain token/); token.creator=identity.publicKey;
+  const originalAttributes=structuredClone(token.attributes);
+  token.attributes.manifest_hash='0'.repeat(64); await bad(['verify'],repo,env,/manifest hash binding mismatch/); token.attributes=originalAttributes;
+  const wrongRoot={...envelope.manifest,root:'0'.repeat(64)};
+  const wrongRootCid=await stored.put(canonical(signManifest(wrongRoot,identity)));
+  token.metadata_uri=wrongRootCid; token.attributes={...originalAttributes,manifest_hash:hash(canonical(wrongRoot))};
+  await bad(['clone','rouge://test/qpository-demo','wrong-root'],join(dir,'clone-machine'),independent,/Repository root mismatch/);
+  token.metadata_uri=originalUri; token.attributes=originalAttributes;
+  const altered=structuredClone(envelope); altered.manifest.root='0'.repeat(64); const modifiedCid=await stored.put(canonical(altered)); token.metadata_uri=modifiedCid; await bad(['verify'],repo,env,/signature/); token.metadata_uri=originalUri;
+  const forged=structuredClone(envelope.manifest); forged.previous=`sha256:${'0'.repeat(64)}`; forged.sequence=2;
+  const forgedCid=await stored.put(canonical(signManifest(forged,identity))),collection=[...fixture.collections.values()][0];
+  fixture.tokens.set(`${collection.collection_id}:2`,{...token,token_id:2,metadata_uri:forgedCid}); collection.minted=2;
+  await bad(['verify'],repo,env,/Replayed or incompatible/); fixture.tokens.delete(`${collection.collection_id}:2`); collection.minted=1;
+  await writeFile(join(repo,'hello.txt'),'second proven state\n'); git(repo,['add','.']); git(repo,['commit','-m','second']); await good(['push'],repo,env); await good(['verify'],repo,env); assert.equal(collection.minted,2);
+  collection.minted=1; await bad(['verify'],repo,env,/rollback/); collection.minted=2;
+  await good(['status'],repo,env); await bad(['verify'],repo,{...env,QPO_CHAIN_ID:'wrong-chain'},/chain ID/);
+  const http=new HttpStorage(url,'storage-test-token'); assert.equal(await http.exists(`sha256:${'f'.repeat(64)}`),false);
+  await assert.rejects(new HttpStorage(url).put(Buffer.from('unauthorized')),/401/);
+  assert.equal(await http.exists(cfg.envelopeCid),true);
+});

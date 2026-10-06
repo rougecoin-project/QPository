@@ -25,3 +25,9 @@ Today's scope: public repositories published with the local CLI, browsed and ver
 - Clone against that deployed endpoint from an independent environment. Existing tests use an SDK HTTP fixture; the earlier real testnet demo used shared file storage. Neither substitutes for this final hosted-endpoint check.
 
 No browser-based repository publishing, accounts, issues, pull requests, private repositories or encryption are included in today's scope.
+
+## Netlify validation — 2026-10-06
+
+Production URL: https://qpository.netlify.app/ . Existing Netlify site c1d42413-383e-4827-9c79-4fe904b3d37c was deployed with the verified public demo objects. Root netlify.toml builds website/ and publishes dist/. GitHub source remains private.
+
+A fresh local verifier directory, without the publisher wallet or shared file CAS, successfully cloned rouge://test/qpository-demo using QPO_STORAGE=https://qpository.netlify.app and the expected public owner key, then printed all three verification successes against the live RougeChain testnet. This validates the remote storage path from a fresh environment on the same Windows machine; a separate physical machine has not yet been tested. The homepage returned HTTP 200. Future snapshots require export and deployment; this milestone does not implement automatic hosting deployment from qpo push.

@@ -1,9 +1,11 @@
 #!/usr/bin/env node
+import { loginSign } from '../src/login.mjs';
 import { init, push, clone, verify, status } from '../src/qpo.mjs';
 import { webExport } from '../src/web-export.mjs';
 const [command,...args]=process.argv.slice(2);
 try {
-  if(command==='init' && !args.length) { const c=await init(); console.log(`Initialized rouge://${c.owner}/${c.repository}\nLocal ML-DSA-65 identity stored outside Git`); }
+  if(command==='login-sign' && args.length===1) console.log(JSON.stringify(await loginSign(args[0])));
+  else if(command==='init' && !args.length) { const c=await init(); console.log(`Initialized rouge://${c.owner}/${c.repository}\nLocal ML-DSA-65 identity stored outside Git`); }
   else if(command==='push' && (!args.length || (args.length===2 && args[0]==='--web' && args[1]))) {
     const c=await push(); console.log(`RougeChain proof: ${c.proof}\nEnvelope: ${c.envelopeCid}`);
     const destination=args[1] || process.env.QPO_WEB_DIST;

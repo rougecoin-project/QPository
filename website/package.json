@@ -1,1 +1,1 @@
-{"name":"qpository-website","version":"0.1.0","private":true,"type":"module","scripts":{"build":"node build.mjs","dev":"node server.mjs"},"dependencies":{"@noble/post-quantum":"0.5.4"},"devDependencies":{"esbuild":"0.25.12"}}
+{"name":"qpository-website","version":"0.1.0","private":true,"type":"module","scripts":{"build":"node build.mjs","dev":"node server.mjs"},"dependencies":{"@netlify/blobs":"11.1.3","@noble/post-quantum":"0.5.4"},"devDependencies":{"esbuild":"0.25.12"}}

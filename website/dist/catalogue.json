@@ -10,6 +10,16 @@
       "sequence": 1,
       "timestamp": "2026-10-06T03:08:09.512Z",
       "data": "repositories/36e3a07150786da97bccf7f1c6d83e2f061092d28b83fa787b3412360d3b6b43.json"
+    },
+    {
+      "owner": "test",
+      "name": "qpository",
+      "uri": "rouge://test/qpository",
+      "repositoryId": "721dec83af117b477ac68a505171680d72e446f7d8b3f6c08e20c09422825d79/qpository",
+      "head": "df402e4dd9a0ede02fc32bf8bd84175e91782c1d",
+      "sequence": 1,
+      "timestamp": "2026-10-10T04:35:01.121Z",
+      "data": "repositories/1595f8b1df851fa359e85085f018c45c3a96ccae46c546c40a999ea509c232f8.json"
     }
   ]
 }
